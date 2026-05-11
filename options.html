@@ -104,7 +104,8 @@
   <p class="sub">Configure your API key and learn how the extension works.</p>
 
   <h2>What this extension does</h2>
-  <p>One click captures the current web page as a full-page PDF, computes its SHA-256, and anchors that hash on the Polygon blockchain via the public BA Stamp API. The PDF — with the URL and capture timestamp printed in the footer of every page — is saved to your Downloads folder.</p>
+  <p>Capture the current web page as a full-page PDF (default) or as a viewport PNG screenshot — your choice in the popup. The file lands in your Downloads and opens for review. <strong>No credit is charged until you click Confirm.</strong> Once confirmed, the extension SHA-256s the file and anchors that hash on the Polygon blockchain via the public BA Stamp API.</p>
+  <p class="muted">The PDF carries the URL + capture timestamp in the footer of every page. The PNG has the same info in a banner above the screenshot. Both are designed so the resulting file alone tells you what was captured and when.</p>
 
   <h2>What the stamp certifies</h2>
   <p>That <strong>this specific PDF</strong> existed at the time it was anchored on chain. The on-chain transaction commits to the PDF's SHA-256 forever. Anyone, anywhere, can take that PDF and recompute its hash to prove it matches the anchor.</p>
@@ -113,20 +114,20 @@
   <h2>How to verify a stamp</h2>
   <ol>
     <li>Go to <code>https://bastamp.com/verify/&lt;hash&gt;</code> (the popup shows the link after stamping).</li>
-    <li>Drag the PDF on the drop zone at the bottom of the page.</li>
-    <li>The page recomputes the PDF's SHA-256 and compares it with the on-chain anchor. Match = the PDF you have is identical to the one stamped, byte for byte.</li>
+    <li>Drag the captured file (PDF or PNG) onto the drop zone at the bottom of the page.</li>
+    <li>The page recomputes the file's SHA-256 and compares it with the on-chain anchor. Match = the file you have is byte-for-byte identical to the one stamped.</li>
   </ol>
-  <p class="muted">If you want to verify without trusting bastamp.com, you can compute the hash yourself: <code>sha256sum bastamp-….pdf</code> on Linux/macOS, <code>certutil -hashfile bastamp-….pdf SHA256</code> on Windows. The output (prefixed with <code>0x</code>) must match the hash on the verify page. The open-source verifier at <a href="https://github.com/stamp-verify/stamp-verify" target="_blank" rel="noopener">stamp-verify/stamp-verify</a> can also confirm the on-chain anchor independently.</p>
+  <p class="muted">If you want to verify without trusting bastamp.com, compute the hash yourself: <code>sha256sum bastamp-….pdf</code> (or .png) on Linux/macOS, <code>certutil -hashfile bastamp-….pdf SHA256</code> on Windows. The output (prefixed with <code>0x</code>) must match the hash on the verify page. The open-source verifier at <a href="https://github.com/stamp-verify/stamp-verify" target="_blank" rel="noopener">stamp-verify/stamp-verify</a> can also confirm the on-chain anchor independently.</p>
 
   <h2>Privacy — what gets sent</h2>
   <p>To BA Stamp: <strong>only the SHA-256 hash</strong> of the PDF (66 chars), the file size, the file name, and the MIME type. <strong>The PDF itself never leaves your browser</strong> — it's saved straight to your Downloads.</p>
   <p>Permissions explained:</p>
   <ul>
-    <li><code>activeTab</code> + <code>scripting</code> — read the current page when you click the toolbar button.</li>
-    <li><code>debugger</code> — needed to call Chrome's <code>Page.printToPDF</code>, the only way to generate a full-page PDF (not just visible viewport). Chrome briefly shows a yellow "DevTools attached" bar; the extension detaches as soon as the PDF is produced.</li>
-    <li><code>downloads</code> — save the PDF to your Downloads folder.</li>
-    <li><code>storage</code> — store your API key locally (in this browser only).</li>
-    <li><code>notifications</code> — show a "page stamped" toast.</li>
+    <li><code>activeTab</code> — read the current page (URL + viewport contents) when you click the toolbar button.</li>
+    <li><code>debugger</code> — needed to call Chrome's <code>Page.printToPDF</code>, the only way to generate a full-page PDF (not just visible viewport). Chrome briefly shows a yellow "DevTools attached" bar; the extension detaches as soon as the PDF is produced. Not used for PNG captures.</li>
+    <li><code>downloads</code> — save the captured file to your Downloads folder, open it for preview, and delete it if you cancel.</li>
+    <li><code>storage</code> — store your API key and the in-progress preview state locally (in this browser only).</li>
+    <li><code>notifications</code> — show a "page stamped" toast after confirm.</li>
     <li><code>host_permissions: https://bastamp.com/*</code> — call the stamping API. Nothing else.</li>
   </ul>
 

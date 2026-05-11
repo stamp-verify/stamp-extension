@@ -1,8 +1,8 @@
 # BA | Stamp browser extension
 
-One-click web-page timestamping. Click the toolbar button — the extension captures the current page as a full-page PDF, anchors the PDF's SHA-256 on the Polygon blockchain via [bastamp.com](https://bastamp.com)'s public API, and saves the PDF to your Downloads folder.
+Web-page timestamping in two clicks. The extension captures the current page (full-page PDF *or* visible-viewport PNG, your choice), opens the captured file so you can review it, and only anchors its SHA-256 on the Polygon blockchain — charging one credit — after you click **Confirm**.
 
-The PDF is your evidence. Drop it on `bastamp.com/verify/<hash>` (or hash it yourself) to prove it hasn't been tampered with since the on-chain anchor.
+The captured file (PDF or PNG) is your evidence. Drop it on `bastamp.com/verify/<hash>` (or hash it yourself) to prove it hasn't been tampered with since the on-chain anchor.
 
 ## What it certifies
 
@@ -12,12 +12,11 @@ It does **not** certify that the page was authentic, that the server wasn't lyin
 
 ## How it works
 
-1. You click the toolbar button on any page.
-2. Chrome's DevTools Protocol generates a full-page PDF (selectable text, every section, not just the visible viewport). Every page of the PDF carries a footer with the URL and capture timestamp.
-3. The extension SHA-256s the PDF bytes.
-4. It POSTs `{ contentHash, fileSize, fileName, mimeType }` to `https://bastamp.com/api/v1/stamps` with your API key. **The PDF itself never leaves your browser.**
-5. bastamp.com batches your hash into a Merkle tree and anchors the root on Polygon (~5 min). The anchor is forever.
-6. The PDF is saved to your Downloads folder.
+1. Click the toolbar button on any page. Pick **Full-page PDF** (selectable text, every section, URL + timestamp footer on every page) or **Screenshot PNG** (visible viewport with a URL + timestamp banner above the image). Click **Capture & preview**.
+2. The extension generates the file via Chrome's DevTools Protocol (for PDF) or `tabs.captureVisibleTab` + OffscreenCanvas (for PNG), saves it to your Downloads, and opens it for review. **No credit charged yet.**
+3. You inspect the file — fonts, layout, missing content. If anything's wrong, click **Cancel & delete file** in the popup; the file is removed from Downloads and nothing happens on chain.
+4. If it looks right, click **Confirm & anchor (1 credit)**. The extension SHA-256s the file and POSTs `{ contentHash, fileSize, fileName, mimeType }` to `https://bastamp.com/api/v1/stamps` with your API key. **The file itself never leaves your browser.**
+5. bastamp.com batches your hash into a Merkle tree and anchors the root on Polygon (~5 min). The anchor is forever. The file stays in your Downloads.
 
 ## How to verify
 
@@ -52,11 +51,11 @@ Each stamp uses one credit from your bastamp.com account.
 
 | Permission | What it's for |
 |---|---|
-| `activeTab` + `scripting` | Read the current page when you click the toolbar button. |
-| `debugger` | Required by Chrome to use `Page.printToPDF` (the only way to capture a full-page PDF, not just the visible part). Chrome briefly shows a yellow "DevTools attached" bar; the extension detaches as soon as the PDF is generated (≤2 seconds for most pages). |
-| `downloads` | Save the PDF to your Downloads folder. |
-| `storage` | Store your API key locally (chrome.storage.local — never leaves the browser). |
-| `notifications` | Show a "page stamped" toast. |
+| `activeTab` | Read the current page (URL + viewport contents) when you click the toolbar button. |
+| `debugger` | Required by Chrome to use `Page.printToPDF` (the only way to capture a full-page PDF, not just the visible part). Chrome briefly shows a yellow "DevTools attached" bar; the extension detaches as soon as the PDF is generated (≤2 seconds for most pages). Not used for PNG captures. |
+| `downloads` | Save the captured file to your Downloads folder, open it for preview, and delete it if you cancel. |
+| `storage` | Store your API key and the in-progress preview state locally (chrome.storage.local — never leaves the browser). |
+| `notifications` | Show a "page stamped" toast on confirm. |
 | `host_permissions: https://bastamp.com/*` | Call the stamping API. |
 
 The extension does **not** request access to all sites, your network, your history, bookmarks, cookies, or any other data.

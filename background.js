@@ -1,32 +1,39 @@
-// Service worker: captures the active tab as a full-page PDF, anchors the
-// PDF's SHA-256 on Polygon via bastamp.com's public API, saves the PDF to
-// the user's Downloads folder. Done.
+// Service worker: split the stamp flow into preview + confirm so the user
+// reviews the captured artifact before a credit is charged.
 //
-// Flow per click:
-//   1. chrome.debugger.attach (yellow "DevTools attached" bar flashes briefly)
-//   2. Page.printToPDF with header/footer template stamped onto every page
-//   3. chrome.debugger.detach
-//   4. SHA-256(PDF bytes) → contentHash
-//   5. POST /api/v1/stamps with the user's API key
-//   6. Cross-check that server echoes back the same hash
-//   7. chrome.downloads.download the PDF
-//
-// The PDF *is* the bundle. To verify later, the user drops the same PDF on
-// bastamp.com/verify/<hash>, which hashes the file and compares with the
-// on-chain anchor.
+// Messages from popup:
+//   { type: "previewStamp", tabId, format }
+//       Capture page as PDF or PNG, save to Downloads, open it for review,
+//       store the pending state, return { hash, fileSize, format, fileName }.
+//   { type: "confirmStamp" }
+//       Read pending state, POST to /api/v1/stamps (1 credit), clear pending.
+//   { type: "cancelStamp" }
+//       Read pending state, delete the previewed file from Downloads, clear.
+//   { type: "getPending" }
+//       Return pending state if any (popup uses this on open to restore UI).
 
 const API_BASE = "https://bastamp.com";
 const CDP_PROTOCOL_VERSION = "1.3";
+const PENDING_TTL_MS = 30 * 60 * 1000; // 30 min — preview state expires
+const PENDING_KEY = "pendingStamp";
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== "stamp") return;
-  stampCurrentTab(msg.tabId)
+  const handler =
+    msg?.type === "previewStamp" ? handlePreview(msg) :
+    msg?.type === "confirmStamp" ? handleConfirm() :
+    msg?.type === "cancelStamp" ? handleCancel() :
+    msg?.type === "getPending" ? handleGetPending() :
+    null;
+  if (!handler) return;
+  handler
     .then((r) => sendResponse({ ok: true, ...r }))
     .catch((err) => sendResponse({ ok: false, error: err.message ?? String(err) }));
-  return true; // keeps the message channel open for async sendResponse
+  return true; // async sendResponse
 });
 
-async function stampCurrentTab(tabId) {
+// ── preview ──
+
+async function handlePreview({ tabId, format }) {
   const apiKey = await getApiKey();
   if (!apiKey) {
     throw new Error("API key not set. Open Settings and paste your bastamp.com API key.");
@@ -35,39 +42,78 @@ async function stampCurrentTab(tabId) {
   const tab = await chrome.tabs.get(tabId);
   const capturedAt = new Date().toISOString();
 
-  // Step 1 — full-page PDF via CDP, with our header/footer baked into
-  // every page (URL + timestamp + BA Stamp branding).
-  const pdfBase64 = await capturePagePdf(tabId, tab.url, capturedAt);
-  const pdfBytes = base64ToBytes(pdfBase64);
+  let bytes, mimeType, extension;
+  if (format === "png") {
+    bytes = await captureViewportPng(tab.windowId, tab.url, capturedAt);
+    mimeType = "image/png";
+    extension = "png";
+  } else {
+    bytes = await capturePagePdf(tabId, tab.url, capturedAt);
+    mimeType = "application/pdf";
+    extension = "pdf";
+  }
 
-  // Step 2 — hash the PDF bytes. This is the on-chain anchor and the
-  // only thing the user needs to verify the artifact later.
-  const contentHash = "0x" + (await sha256HexFromBytes(pdfBytes));
+  const contentHash = "0x" + (await sha256HexFromBytes(bytes));
+  const fileName = makeFileName(tab.url, capturedAt, extension);
+  const dataUrl = bytesToDataUrl(bytes, mimeType);
 
-  // Step 3 — anchor via the public API
-  const fileName = makeFileName(tab.url, capturedAt);
-  const requestBody = JSON.stringify({
-    contentHash,
-    fileName,
-    fileSize: pdfBytes.length,
-    mimeType: "application/pdf",
+  const downloadId = await chrome.downloads.download({
+    url: dataUrl,
+    filename: fileName,
+    saveAs: false,
   });
-  console.log("[bastamp] POST /api/v1/stamps", { contentHash, fileSize: pdfBytes.length });
+  // Open the saved file for review (PDF viewer or image viewer).
+  try { await chrome.downloads.open(downloadId); } catch { /* best-effort */ }
+
+  await chrome.storage.local.set({
+    [PENDING_KEY]: {
+      contentHash,
+      fileName,
+      fileSize: bytes.length,
+      mimeType,
+      format,
+      downloadId,
+      sourceUrl: tab.url,
+      capturedAt,
+      createdAtMs: Date.now(),
+    },
+  });
+
+  return { hash: contentHash, fileName, fileSize: bytes.length, format };
+}
+
+// ── confirm: anchor on chain ──
+
+async function handleConfirm() {
+  const pending = await readPending();
+  if (!pending) throw new Error("no pending stamp to confirm");
+
+  const apiKey = await getApiKey();
+  if (!apiKey) throw new Error("API key not set");
+
+  const requestBody = JSON.stringify({
+    contentHash: pending.contentHash,
+    fileName: pending.fileName,
+    fileSize: pending.fileSize,
+    mimeType: pending.mimeType,
+  });
+  console.log("[bastamp] POST /api/v1/stamps", {
+    contentHash: pending.contentHash, format: pending.format, fileSize: pending.fileSize,
+  });
 
   const apiResponse = await fetch(`${API_BASE}/api/v1/stamps`, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: requestBody,
   });
   const responseText = await apiResponse.text();
-  console.log("[bastamp] response", { status: apiResponse.status, ok: apiResponse.ok, body: responseText.slice(0, 500) });
+  console.log("[bastamp] response", {
+    status: apiResponse.status, ok: apiResponse.ok, body: responseText.slice(0, 500),
+  });
 
   if (!apiResponse.ok) {
     let parsed;
-    try { parsed = JSON.parse(responseText); } catch { /* not json */ }
+    try { parsed = JSON.parse(responseText); } catch {}
     const msg = parsed?.error?.message ?? parsed?.error ?? responseText ?? `HTTP ${apiResponse.status}`;
     throw new Error(`bastamp.com: ${msg}`);
   }
@@ -75,38 +121,77 @@ async function stampCurrentTab(tabId) {
   try {
     const parsed = JSON.parse(responseText);
     serverHash = parsed?.stamp?.contentHash ?? null;
-  } catch { /* unexpected */ }
-  if (serverHash && serverHash.toLowerCase() !== contentHash.toLowerCase()) {
-    console.error("[bastamp] HASH MISMATCH", { sent: contentHash, server: serverHash });
+  } catch {}
+  if (serverHash && serverHash.toLowerCase() !== pending.contentHash.toLowerCase()) {
+    console.error("[bastamp] HASH MISMATCH", { sent: pending.contentHash, server: serverHash });
     throw new Error(`server echoed a different hash: ${serverHash}`);
   }
   if (!serverHash) {
     console.error("[bastamp] server response had no stamp.contentHash", responseText.slice(0, 500));
-    throw new Error("server response had no stamp.contentHash — see service worker console");
+    throw new Error("server response had no stamp.contentHash");
   }
 
-  // Step 4 — save PDF to Downloads
-  const pdfDataUrl = "data:application/pdf;base64," + pdfBase64;
-  await chrome.downloads.download({
-    url: pdfDataUrl,
-    filename: fileName,
-    saveAs: false,
-  });
+  await chrome.storage.local.remove(PENDING_KEY);
 
-  // Step 5 — toast
   try {
     await chrome.notifications.create({
       type: "basic",
       iconUrl: "icons/128.png",
       title: "BA | Stamp",
-      message: "Page stamped. PDF saved to Downloads.",
+      message: "Page stamped on chain. 1 credit charged.",
     });
-  } catch { /* notifications may not be granted */ }
+  } catch {}
 
-  return { hash: contentHash };
+  return { hash: pending.contentHash };
 }
 
-// ── full-page PDF via CDP, with branded header/footer ──
+// ── cancel: discard preview ──
+
+async function handleCancel() {
+  const pending = await readPending();
+  if (!pending) return { discarded: false };
+
+  try {
+    await chrome.downloads.removeFile(pending.downloadId);
+  } catch (e) {
+    console.warn("[bastamp] removeFile failed (file may already be gone):", e?.message);
+  }
+  try {
+    await chrome.downloads.erase({ id: pending.downloadId });
+  } catch {}
+
+  await chrome.storage.local.remove(PENDING_KEY);
+  return { discarded: true };
+}
+
+// ── pending state ──
+
+async function readPending() {
+  const stored = (await chrome.storage.local.get([PENDING_KEY]))?.[PENDING_KEY];
+  if (!stored) return null;
+  if (Date.now() - stored.createdAtMs > PENDING_TTL_MS) {
+    await chrome.storage.local.remove(PENDING_KEY);
+    return null;
+  }
+  return stored;
+}
+
+async function handleGetPending() {
+  const pending = await readPending();
+  if (!pending) return { pending: null };
+  return {
+    pending: {
+      hash: pending.contentHash,
+      fileName: pending.fileName,
+      fileSize: pending.fileSize,
+      format: pending.format,
+      sourceUrl: pending.sourceUrl,
+      capturedAt: pending.capturedAt,
+    },
+  };
+}
+
+// ── full-page PDF via CDP ──
 
 async function capturePagePdf(tabId, url, capturedAtIso) {
   const target = { tabId };
@@ -127,22 +212,60 @@ async function capturePagePdf(tabId, url, capturedAtIso) {
     const result = await chrome.debugger.sendCommand(target, "Page.printToPDF", {
       printBackground: true,
       preferCSSPageSize: false,
-      paperWidth: 8.27,   // A4 portrait
+      paperWidth: 8.27,
       paperHeight: 11.69,
-      marginTop: 0.5,
-      marginBottom: 0.5,
-      marginLeft: 0.4,
-      marginRight: 0.4,
+      marginTop: 0.5, marginBottom: 0.5, marginLeft: 0.4, marginRight: 0.4,
       displayHeaderFooter: true,
       headerTemplate,
       footerTemplate,
       generateDocumentOutline: false,
     });
     if (!result?.data) throw new Error("Page.printToPDF returned no data");
-    return result.data;
+    return base64ToBytes(result.data);
   } finally {
     try { await chrome.debugger.detach(target); } catch {}
   }
+}
+
+// ── viewport PNG with URL banner overlay ──
+
+async function captureViewportPng(windowId, url, capturedAtIso) {
+  const screenshotDataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+  const screenshotBlob = await (await fetch(screenshotDataUrl)).blob();
+  const bitmap = await createImageBitmap(screenshotBlob);
+
+  const BANNER = 56;
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height + BANNER);
+  const ctx = canvas.getContext("2d");
+
+  // Banner background (dark) at top
+  ctx.fillStyle = "#080c12";
+  ctx.fillRect(0, 0, canvas.width, BANNER);
+
+  // Brand label
+  ctx.fillStyle = "#5eead4";
+  ctx.font = "bold 11px -apple-system, Segoe UI, Roboto, sans-serif";
+  ctx.fillText("BA | STAMP", 16, 22);
+
+  // URL (truncate if too long)
+  const maxUrlChars = Math.floor((canvas.width - 32) / 7);
+  const urlText = url.length > maxUrlChars ? url.slice(0, maxUrlChars - 1) + "…" : url;
+  ctx.fillStyle = "#e4e4e7";
+  ctx.font = "13px -apple-system, Segoe UI, Roboto, sans-serif";
+  ctx.fillText(urlText, 16, 40);
+
+  // Timestamp (right-aligned)
+  ctx.fillStyle = "#8a8f98";
+  ctx.font = "11px -apple-system, Segoe UI, Roboto, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("Captured " + capturedAtIso, canvas.width - 16, 22);
+  ctx.textAlign = "left";
+
+  // The screenshot itself, below the banner
+  ctx.drawImage(bitmap, 0, BANNER);
+
+  const blob = await canvas.convertToBlob({ type: "image/png" });
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 // ── helpers ──
@@ -152,19 +275,16 @@ async function getApiKey() {
   return typeof apiKey === "string" && apiKey.trim() ? apiKey.trim() : null;
 }
 
-function makeFileName(url, capturedAtIso) {
+function makeFileName(url, capturedAtIso, extension) {
   let host = "page";
   try { host = new URL(url).hostname.replace(/[^a-z0-9.-]/gi, "_"); } catch {}
   const stamp = capturedAtIso.replace(/[:.]/g, "-").slice(0, 19);
-  return `bastamp-${host}-${stamp}.pdf`;
+  return `bastamp-${host}-${stamp}.${extension}`;
 }
 
 function escapeHtmlAttr(s) {
   return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function base64ToBytes(b64) {
@@ -172,6 +292,16 @@ function base64ToBytes(b64) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+function bytesToDataUrl(bytes, mimeType) {
+  // Chunked btoa to avoid stack overflow on large buffers.
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return `data:${mimeType};base64,${btoa(bin)}`;
 }
 
 async function sha256HexFromBytes(bytes) {

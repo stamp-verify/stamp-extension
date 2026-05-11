@@ -8,23 +8,70 @@
 <body>
   <header>
     <span class="brand">BA <span class="brand-pipe">|</span> STAMP</span>
-    <div class="tagline">Anchor any web page on Polygon as a tamper-proof PDF</div>
+    <div class="tagline">Anchor any web page on Polygon</div>
   </header>
 
   <main>
-    <div id="target">
-      <div class="target-label">Page to stamp</div>
-      <div class="target-url" id="target-url">—</div>
+    <!-- READY: no pending preview, user can start a new capture -->
+    <div id="state-ready">
+      <div id="target">
+        <div class="target-label">Page to stamp</div>
+        <div class="target-url" id="target-url">—</div>
+      </div>
+
+      <div class="format-group" role="radiogroup" aria-label="Capture format">
+        <label class="format-opt">
+          <input type="radio" name="format" value="pdf" checked>
+          <div>
+            <div class="format-title">Full-page PDF</div>
+            <div class="format-sub">Whole page rendered as a multi-page PDF with URL + timestamp in every footer. Selectable text. Recommended for legal evidence.</div>
+          </div>
+        </label>
+        <label class="format-opt">
+          <input type="radio" name="format" value="png">
+          <div>
+            <div class="format-title">Screenshot PNG</div>
+            <div class="format-sub">Visible viewport only, with a banner above showing URL + timestamp. Smaller file, no off-screen content. Good for proving "what I saw on screen".</div>
+          </div>
+        </label>
+      </div>
+
+      <button id="capture-btn" class="primary">Capture &amp; preview</button>
+      <div class="hint">No credit charged yet — preview opens, then you confirm.</div>
     </div>
 
-    <button id="stamp-btn" class="primary">Stamp this page</button>
+    <!-- GENERATING: capture in flight -->
+    <div id="state-generating" class="hidden">
+      <div class="big-status">Capturing page…</div>
+      <div class="hint" id="generating-hint">Chrome will briefly show a "DevTools attached" bar — that's the PDF capture step.</div>
+    </div>
 
-    <div id="status" class="status hidden"></div>
-    <div id="result" class="result hidden">
-      <div class="result-title">Stamped</div>
-      <div class="result-row"><span>Hash</span><code id="result-hash"></code></div>
-      <div class="result-row"><a id="result-link" target="_blank" rel="noopener">View on bastamp.com →</a></div>
-      <div class="result-row muted">PDF saved to your Downloads folder. That file is your evidence — drop it on the verify page to re-confirm the on-chain anchor at any time.</div>
+    <!-- CONFIRM: artifact ready, user is reviewing the opened file -->
+    <div id="state-confirm" class="hidden">
+      <div class="result-title">Preview ready</div>
+      <div class="result-row"><span>Format</span><span id="pending-format" class="value"></span></div>
+      <div class="result-row"><span>Size</span><span id="pending-size" class="value"></span></div>
+      <div class="result-row"><span>Hash</span><code id="pending-hash"></code></div>
+      <div class="result-row muted">The file is now open in your viewer. Look it over — if anything's off (missing fonts, broken layout), cancel and re-capture. The on-chain anchor happens only when you confirm.</div>
+
+      <button id="confirm-btn" class="primary">Confirm &amp; anchor (1 credit)</button>
+      <button id="cancel-btn" class="secondary">Cancel &amp; delete file</button>
+    </div>
+
+    <!-- DONE: confirmed, on chain -->
+    <div id="state-done" class="hidden">
+      <div class="result-title done">Anchored ✓</div>
+      <div class="result-row"><span>Hash</span><code id="done-hash"></code></div>
+      <div class="result-row"><a id="done-link" target="_blank" rel="noopener">View on bastamp.com →</a></div>
+      <div class="result-row muted">Anchoring on Polygon takes ~5 minutes. The verify page will show "pending" until the next batch settles, then "anchored". Your file stays in Downloads — drop it on the verify page anytime to re-confirm.</div>
+      <button id="reset-btn" class="secondary">Stamp another page</button>
+    </div>
+
+    <!-- ERROR -->
+    <div id="state-error" class="hidden">
+      <div class="error-title">Something went wrong</div>
+      <div class="error-body" id="error-body"></div>
+      <button id="error-reset-btn" class="secondary">Try again</button>
     </div>
   </main>
 

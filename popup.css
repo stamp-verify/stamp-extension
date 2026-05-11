@@ -1,7 +1,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  width: 360px;
+  width: 380px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: #080c12;
   color: #e4e4e7;
@@ -20,9 +20,7 @@ header {
   display: block;
 }
 
-.brand-pipe {
-  color: #5eead4;
-}
+.brand-pipe { color: #5eead4; }
 
 .tagline {
   margin-top: 6px;
@@ -31,13 +29,9 @@ header {
   line-height: 1.4;
 }
 
-main {
-  padding: 20px;
-}
+main { padding: 20px; }
 
-#target {
-  margin-bottom: 16px;
-}
+#target { margin-bottom: 16px; }
 
 .target-label {
   font-size: 10px;
@@ -55,43 +49,97 @@ main {
   line-height: 1.4;
 }
 
-button.primary {
+/* Format radio group */
+.format-group {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.format-opt {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #1e1e24;
+  background: #0f1419;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.format-opt:hover { border-color: #2a2a30; }
+
+.format-opt input[type="radio"] {
+  accent-color: #5eead4;
+  margin-top: 3px;
+}
+
+.format-opt input[type="radio"]:checked + div .format-title { color: #5eead4; }
+
+.format-opt:has(input:checked) {
+  border-color: #5eead4;
+  background: #0f1419;
+}
+
+.format-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e4e4e7;
+  margin-bottom: 2px;
+}
+
+.format-sub {
+  font-size: 11px;
+  color: #8a8f98;
+  line-height: 1.4;
+}
+
+/* Buttons */
+button {
   width: 100%;
   padding: 12px 16px;
-  background: #5eead4;
-  color: #080c12;
+  border: none;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  border: none;
   cursor: pointer;
+  font-family: inherit;
   transition: opacity 0.15s;
+}
+
+button + button { margin-top: 8px; }
+
+button.primary {
+  background: #5eead4;
+  color: #080c12;
 }
 
 button.primary:hover { opacity: 0.85; }
 button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.status {
-  margin-top: 16px;
-  padding: 10px 12px;
-  font-size: 12px;
+button.secondary {
+  background: transparent;
+  border: 1px solid #1e1e24;
   color: #8a8f98;
-  background: #0f1419;
-  border: 1px solid #1e1e24;
 }
 
-.status.error {
-  color: #ff8888;
-  border-color: #4a1f1f;
+button.secondary:hover { color: #e4e4e7; border-color: #2a2a30; }
+
+.hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #52525b;
+  line-height: 1.5;
+  text-align: center;
 }
 
-.result {
-  margin-top: 16px;
-  padding: 14px;
-  background: #0f1419;
-  border: 1px solid #1e1e24;
-  font-size: 12px;
+/* State labels */
+.big-status {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 14px;
+  color: #e4e4e7;
 }
 
 .result-title {
@@ -99,27 +147,50 @@ button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #5eead4;
-  margin-bottom: 12px;
+  color: #8a8f98;
+  margin-bottom: 14px;
 }
 
+.result-title.done { color: #5eead4; }
+
+.error-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff8888;
+  margin-bottom: 8px;
+}
+
+.error-body {
+  font-size: 12px;
+  color: #c4c4cc;
+  background: #0f1419;
+  border: 1px solid #4a1f1f;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* Result rows */
 .result-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
+  padding: 5px 0;
   font-size: 12px;
 }
 
-.result-row span { color: #8a8f98; }
+.result-row span:first-child { color: #8a8f98; }
+.result-row .value { color: #e4e4e7; }
+
 .result-row code {
   font-family: ui-monospace, "Cascadia Code", monospace;
   font-size: 11px;
   color: #e4e4e7;
   word-break: break-all;
   text-align: right;
-  max-width: 220px;
+  max-width: 240px;
 }
 
 .result-row a {
@@ -133,11 +204,12 @@ button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
   color: #52525b;
   line-height: 1.5;
   display: block;
-  margin-top: 8px;
+  margin-top: 10px;
   padding-top: 12px;
   border-top: 1px solid #1e1e24;
 }
 
+/* Footer */
 footer {
   padding: 12px 20px;
   border-top: 1px solid #1e1e24;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BA | Stamp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Stamp the current web page on Polygon to prove the URL existed at a specific time.",
   "author": "Aletheia Tech Ltd",
   "homepage_url": "https://bastamp.com",
@@ -24,7 +24,6 @@
   "options_page": "options.html",
   "permissions": [
     "activeTab",
-    "scripting",
     "downloads",
     "storage",
     "notifications",
