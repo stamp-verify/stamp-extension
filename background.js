@@ -87,26 +87,47 @@ async function stampCurrentTab(tabId) {
   };
 
   // Step 5 — anchor on chain via the public API
+  const requestBody = JSON.stringify({
+    contentHash: manifestHash,
+    fileName: makeFileName(tab.url),
+    fileSize: manifestCanon.length,
+    mimeType: "application/x-bastamp-web-capture",
+  });
+  console.log("[bastamp] POST /api/v1/stamps", { contentHash: manifestHash, bodyLength: requestBody.length });
+
   const apiResponse = await fetch(`${API_BASE}/api/v1/stamps`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      contentHash: manifestHash,
-      fileName: makeFileName(tab.url),
-      fileSize: manifestCanon.length,
-      mimeType: "application/x-bastamp-web-capture",
-    }),
+    body: requestBody,
   });
 
+  const responseText = await apiResponse.text();
+  console.log("[bastamp] response", { status: apiResponse.status, ok: apiResponse.ok, body: responseText.slice(0, 500) });
+
   if (!apiResponse.ok) {
-    const body = await apiResponse.text();
     let parsed;
-    try { parsed = JSON.parse(body); } catch { /* not json */ }
-    const msg = parsed?.error?.message ?? parsed?.error ?? body ?? `HTTP ${apiResponse.status}`;
+    try { parsed = JSON.parse(responseText); } catch { /* not json */ }
+    const msg = parsed?.error?.message ?? parsed?.error ?? responseText ?? `HTTP ${apiResponse.status}`;
     throw new Error(`bastamp.com: ${msg}`);
+  }
+
+  // Cross-check: the server should echo back the same contentHash we sent.
+  // If it doesn't (or the response is missing), surface that loudly.
+  let serverHash = null;
+  try {
+    const parsed = JSON.parse(responseText);
+    serverHash = parsed?.stamp?.contentHash ?? null;
+  } catch { /* unexpected */ }
+  if (serverHash && serverHash.toLowerCase() !== manifestHash.toLowerCase()) {
+    console.error("[bastamp] HASH MISMATCH", { sent: manifestHash, server: serverHash });
+    throw new Error(`server echoed a different hash: ${serverHash}`);
+  }
+  if (!serverHash) {
+    console.error("[bastamp] server response had no stamp.contentHash", responseText.slice(0, 500));
+    throw new Error("server response had no stamp.contentHash — see service worker console");
   }
 
   // Step 6 — save bundle to Downloads
