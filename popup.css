@@ -17,10 +17,18 @@ header {
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
+  display: block;
 }
 
 .brand-pipe {
   color: #5eead4;
+}
+
+.tagline {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #8a8f98;
+  line-height: 1.4;
 }
 
 main {

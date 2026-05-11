@@ -1,17 +1,22 @@
-// Service worker: orchestrates the capture flow.
+// Service worker: captures the active tab as a full-page PDF, anchors the
+// PDF's SHA-256 on Polygon via bastamp.com's public API, saves the PDF to
+// the user's Downloads folder. Done.
 //
-//   1. Screenshot of the visible tab via chrome.tabs.captureVisibleTab
-//   2. DOM snapshot via chrome.scripting.executeScript (returns outerHTML)
-//   3. Build a deterministic JSON manifest with metadata + the three parts
-//   4. SHA-256 the canonicalized manifest → that's what we anchor
-//   5. POST { contentHash, fileName, mimeType, locale } to /api/v1/stamps
-//   6. Download the manifest JSON to user's Downloads folder
+// Flow per click:
+//   1. chrome.debugger.attach (yellow "DevTools attached" bar flashes briefly)
+//   2. Page.printToPDF with header/footer template stamped onto every page
+//   3. chrome.debugger.detach
+//   4. SHA-256(PDF bytes) → contentHash
+//   5. POST /api/v1/stamps with the user's API key
+//   6. Cross-check that server echoes back the same hash
+//   7. chrome.downloads.download the PDF
 //
-// The user keeps the bundle. To verify later they drop it on
-// bastamp.com/verify, which re-canonicalizes and re-hashes it against the
-// on-chain anchor. Backend stores only the hash — never the page itself.
+// The PDF *is* the bundle. To verify later, the user drops the same PDF on
+// bastamp.com/verify/<hash>, which hashes the file and compares with the
+// on-chain anchor.
 
 const API_BASE = "https://bastamp.com";
+const CDP_PROTOCOL_VERSION = "1.3";
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== "stamp") return;
@@ -28,72 +33,26 @@ async function stampCurrentTab(tabId) {
   }
 
   const tab = await chrome.tabs.get(tabId);
+  const capturedAt = new Date().toISOString();
 
-  // Step 1 — visible-viewport screenshot (PNG, base64 data URL)
-  const screenshotDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
-    format: "png",
-  });
+  // Step 1 — full-page PDF via CDP, with our header/footer baked into
+  // every page (URL + timestamp + BA Stamp branding).
+  const pdfBase64 = await capturePagePdf(tabId, tab.url, capturedAt);
+  const pdfBytes = base64ToBytes(pdfBase64);
 
-  // Step 2 — DOM snapshot
-  const [{ result: domResult }] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => ({
-      title: document.title,
-      html: document.documentElement.outerHTML,
-      viewport: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        devicePixelRatio: window.devicePixelRatio,
-      },
-      userAgent: navigator.userAgent,
-    }),
-  });
+  // Step 2 — hash the PDF bytes. This is the on-chain anchor and the
+  // only thing the user needs to verify the artifact later.
+  const contentHash = "0x" + (await sha256HexFromBytes(pdfBytes));
 
-  // Step 3 — manifest
-  const screenshotBase64 = screenshotDataUrl.replace(/^data:image\/png;base64,/, "");
-  const manifest = {
-    type: "bastamp.web-capture",
-    version: "1",
-    capturedAt: new Date().toISOString(),
-    source: {
-      url: tab.url,
-      title: domResult.title,
-      userAgent: domResult.userAgent,
-      viewport: domResult.viewport,
-    },
-    content: {
-      domSha256: await sha256Hex(domResult.html),
-      domLength: domResult.html.length,
-    },
-    screenshot: {
-      mimeType: "image/png",
-      sha256: await sha256HexFromBase64(screenshotBase64),
-    },
-  };
-
-  // Step 4 — canonicalize + hash the manifest
-  // Bundle is the manifest + the raw parts. Anchor hash is over the manifest
-  // alone (the manifest already commits to dom and screenshot via their
-  // SHA-256, so reproducing the manifest from the parts is sufficient).
-  const manifestCanon = canonicalize(manifest);
-  const manifestHash = "0x" + (await sha256Hex(manifestCanon));
-
-  const bundle = {
-    manifest,
-    parts: {
-      dom: domResult.html,
-      screenshotBase64,
-    },
-  };
-
-  // Step 5 — anchor on chain via the public API
+  // Step 3 — anchor via the public API
+  const fileName = makeFileName(tab.url, capturedAt);
   const requestBody = JSON.stringify({
-    contentHash: manifestHash,
-    fileName: makeFileName(tab.url),
-    fileSize: manifestCanon.length,
-    mimeType: "application/x-bastamp-web-capture",
+    contentHash,
+    fileName,
+    fileSize: pdfBytes.length,
+    mimeType: "application/pdf",
   });
-  console.log("[bastamp] POST /api/v1/stamps", { contentHash: manifestHash, bodyLength: requestBody.length });
+  console.log("[bastamp] POST /api/v1/stamps", { contentHash, fileSize: pdfBytes.length });
 
   const apiResponse = await fetch(`${API_BASE}/api/v1/stamps`, {
     method: "POST",
@@ -103,7 +62,6 @@ async function stampCurrentTab(tabId) {
     },
     body: requestBody,
   });
-
   const responseText = await apiResponse.text();
   console.log("[bastamp] response", { status: apiResponse.status, ok: apiResponse.ok, body: responseText.slice(0, 500) });
 
@@ -113,16 +71,13 @@ async function stampCurrentTab(tabId) {
     const msg = parsed?.error?.message ?? parsed?.error ?? responseText ?? `HTTP ${apiResponse.status}`;
     throw new Error(`bastamp.com: ${msg}`);
   }
-
-  // Cross-check: the server should echo back the same contentHash we sent.
-  // If it doesn't (or the response is missing), surface that loudly.
   let serverHash = null;
   try {
     const parsed = JSON.parse(responseText);
     serverHash = parsed?.stamp?.contentHash ?? null;
   } catch { /* unexpected */ }
-  if (serverHash && serverHash.toLowerCase() !== manifestHash.toLowerCase()) {
-    console.error("[bastamp] HASH MISMATCH", { sent: manifestHash, server: serverHash });
+  if (serverHash && serverHash.toLowerCase() !== contentHash.toLowerCase()) {
+    console.error("[bastamp] HASH MISMATCH", { sent: contentHash, server: serverHash });
     throw new Error(`server echoed a different hash: ${serverHash}`);
   }
   if (!serverHash) {
@@ -130,27 +85,64 @@ async function stampCurrentTab(tabId) {
     throw new Error("server response had no stamp.contentHash — see service worker console");
   }
 
-  // Step 6 — save bundle to Downloads
-  const bundleJson = JSON.stringify(bundle, null, 2);
-  const bundleDataUrl =
-    "data:application/json;base64," + btoa(unescape(encodeURIComponent(bundleJson)));
+  // Step 4 — save PDF to Downloads
+  const pdfDataUrl = "data:application/pdf;base64," + pdfBase64;
   await chrome.downloads.download({
-    url: bundleDataUrl,
-    filename: makeFileName(tab.url),
+    url: pdfDataUrl,
+    filename: fileName,
     saveAs: false,
   });
 
-  // Optional toast
+  // Step 5 — toast
   try {
     await chrome.notifications.create({
       type: "basic",
       iconUrl: "icons/128.png",
       title: "BA | Stamp",
-      message: "Page stamped. Bundle saved to Downloads.",
+      message: "Page stamped. PDF saved to Downloads.",
     });
   } catch { /* notifications may not be granted */ }
 
-  return { hash: manifestHash };
+  return { hash: contentHash };
+}
+
+// ── full-page PDF via CDP, with branded header/footer ──
+
+async function capturePagePdf(tabId, url, capturedAtIso) {
+  const target = { tabId };
+  await chrome.debugger.attach(target, CDP_PROTOCOL_VERSION);
+  try {
+    const headerTemplate = `
+      <div style="width:100%;font-size:7px;color:#888;padding:0 12mm;display:flex;justify-content:space-between;align-items:center;">
+        <span style="letter-spacing:0.18em;font-weight:700;color:#444">BA | STAMP</span>
+        <span class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;text-align:center;color:#666"></span>
+        <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
+      </div>`;
+    const footerTemplate = `
+      <div style="width:100%;font-size:7px;color:#888;padding:0 12mm;display:flex;justify-content:space-between;">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;color:#666">${escapeHtmlAttr(url)}</span>
+        <span style="color:#666">Captured ${escapeHtmlAttr(capturedAtIso)}</span>
+      </div>`;
+
+    const result = await chrome.debugger.sendCommand(target, "Page.printToPDF", {
+      printBackground: true,
+      preferCSSPageSize: false,
+      paperWidth: 8.27,   // A4 portrait
+      paperHeight: 11.69,
+      marginTop: 0.5,
+      marginBottom: 0.5,
+      marginLeft: 0.4,
+      marginRight: 0.4,
+      displayHeaderFooter: true,
+      headerTemplate,
+      footerTemplate,
+      generateDocumentOutline: false,
+    });
+    if (!result?.data) throw new Error("Page.printToPDF returned no data");
+    return result.data;
+  } finally {
+    try { await chrome.debugger.detach(target); } catch {}
+  }
 }
 
 // ── helpers ──
@@ -160,34 +152,29 @@ async function getApiKey() {
   return typeof apiKey === "string" && apiKey.trim() ? apiKey.trim() : null;
 }
 
-function makeFileName(url) {
+function makeFileName(url, capturedAtIso) {
   let host = "page";
   try { host = new URL(url).hostname.replace(/[^a-z0-9.-]/gi, "_"); } catch {}
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  return `bastamp-${host}-${stamp}.json`;
+  const stamp = capturedAtIso.replace(/[:.]/g, "-").slice(0, 19);
+  return `bastamp-${host}-${stamp}.pdf`;
 }
 
-// Canonical JSON: deterministic stringification with sorted keys at every
-// depth, no whitespace. RFC 8785 (JCS) compatible for the shapes we use
-// here (strings, numbers, booleans, null, objects, arrays — no Unicode
-// escape quirks because we let JSON.stringify handle escaping).
-function canonicalize(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return "[" + value.map(canonicalize).join(",") + "]";
-  const keys = Object.keys(value).sort();
-  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalize(value[k])).join(",") + "}";
+function escapeHtmlAttr(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-async function sha256Hex(input) {
-  const enc = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", enc);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function sha256HexFromBase64(b64) {
+function base64ToBytes(b64) {
   const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function sha256HexFromBytes(bytes) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

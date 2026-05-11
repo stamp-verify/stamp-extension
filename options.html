@@ -9,8 +9,8 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #080c12;
       color: #e4e4e7;
-      padding: 40px 24px;
-      max-width: 560px;
+      padding: 40px 24px 80px;
+      max-width: 720px;
       margin: 0 auto;
       line-height: 1.5;
     }
@@ -19,14 +19,44 @@
       font-weight: 700;
       letter-spacing: 0.22em;
       text-transform: uppercase;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     h1 .pipe { color: #5eead4; }
     .sub {
       font-size: 13px;
       color: #8a8f98;
-      margin-bottom: 32px;
+      margin-bottom: 36px;
     }
+    h2 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #5eead4;
+      margin: 32px 0 12px;
+      padding-top: 24px;
+      border-top: 1px solid #1e1e24;
+    }
+    h2:first-of-type { border-top: none; padding-top: 0; }
+    p { font-size: 13px; color: #c4c4cc; margin-bottom: 12px; }
+    p.muted { color: #8a8f98; font-size: 12px; }
+    ol, ul {
+      padding-left: 20px;
+      margin: 10px 0 16px;
+      font-size: 13px;
+      color: #c4c4cc;
+    }
+    li { margin-bottom: 6px; }
+    code, .mono {
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 12px;
+      color: #5eead4;
+      background: #0f1419;
+      padding: 1px 5px;
+      border: 1px solid #1e1e24;
+    }
+    a { color: #5eead4; text-decoration: none; }
+    a:hover { text-decoration: underline; }
     label {
       display: block;
       font-size: 11px;
@@ -45,20 +75,9 @@
       font-size: 13px;
       font-family: ui-monospace, "Cascadia Code", monospace;
     }
-    input:focus {
-      outline: none;
-      border-color: #5eead4;
-    }
-    .help {
-      font-size: 12px;
-      color: #52525b;
-      margin-top: 10px;
-      line-height: 1.6;
-    }
-    .help a { color: #5eead4; text-decoration: none; }
-    .help a:hover { text-decoration: underline; }
+    input:focus { outline: none; border-color: #5eead4; }
     button {
-      margin-top: 24px;
+      margin-top: 16px;
       padding: 12px 26px;
       background: #5eead4;
       color: #080c12;
@@ -82,19 +101,53 @@
 </head>
 <body>
   <h1>BA <span class="pipe">|</span> Stamp — Settings</h1>
-  <p class="sub">Configure your bastamp.com API key. Stored locally in your browser — never sent anywhere except bastamp.com.</p>
+  <p class="sub">Configure your API key and learn how the extension works.</p>
+
+  <h2>What this extension does</h2>
+  <p>One click captures the current web page as a full-page PDF, computes its SHA-256, and anchors that hash on the Polygon blockchain via the public BA Stamp API. The PDF — with the URL and capture timestamp printed in the footer of every page — is saved to your Downloads folder.</p>
+
+  <h2>What the stamp certifies</h2>
+  <p>That <strong>this specific PDF</strong> existed at the time it was anchored on chain. The on-chain transaction commits to the PDF's SHA-256 forever. Anyone, anywhere, can take that PDF and recompute its hash to prove it matches the anchor.</p>
+  <p class="muted">It does not certify that the page was authentic, that the server wasn't lying, or that no one tampered with the page before you captured it. It only proves that the page <em>as you saw it</em> existed at this time — useful for journalism, IP, AI provenance, scam evidence, and audit trails.</p>
+
+  <h2>How to verify a stamp</h2>
+  <ol>
+    <li>Go to <code>https://bastamp.com/verify/&lt;hash&gt;</code> (the popup shows the link after stamping).</li>
+    <li>Drag the PDF on the drop zone at the bottom of the page.</li>
+    <li>The page recomputes the PDF's SHA-256 and compares it with the on-chain anchor. Match = the PDF you have is identical to the one stamped, byte for byte.</li>
+  </ol>
+  <p class="muted">If you want to verify without trusting bastamp.com, you can compute the hash yourself: <code>sha256sum bastamp-….pdf</code> on Linux/macOS, <code>certutil -hashfile bastamp-….pdf SHA256</code> on Windows. The output (prefixed with <code>0x</code>) must match the hash on the verify page. The open-source verifier at <a href="https://github.com/stamp-verify/stamp-verify" target="_blank" rel="noopener">stamp-verify/stamp-verify</a> can also confirm the on-chain anchor independently.</p>
+
+  <h2>Privacy — what gets sent</h2>
+  <p>To BA Stamp: <strong>only the SHA-256 hash</strong> of the PDF (66 chars), the file size, the file name, and the MIME type. <strong>The PDF itself never leaves your browser</strong> — it's saved straight to your Downloads.</p>
+  <p>Permissions explained:</p>
+  <ul>
+    <li><code>activeTab</code> + <code>scripting</code> — read the current page when you click the toolbar button.</li>
+    <li><code>debugger</code> — needed to call Chrome's <code>Page.printToPDF</code>, the only way to generate a full-page PDF (not just visible viewport). Chrome briefly shows a yellow "DevTools attached" bar; the extension detaches as soon as the PDF is produced.</li>
+    <li><code>downloads</code> — save the PDF to your Downloads folder.</li>
+    <li><code>storage</code> — store your API key locally (in this browser only).</li>
+    <li><code>notifications</code> — show a "page stamped" toast.</li>
+    <li><code>host_permissions: https://bastamp.com/*</code> — call the stamping API. Nothing else.</li>
+  </ul>
+
+  <h2>API key</h2>
+  <p>Each stamp uses one credit from your bastamp.com account. To get a key:</p>
+  <ol>
+    <li>Sign in at <a href="https://bastamp.com" target="_blank" rel="noopener">bastamp.com</a> (or create an account — first stamp is free).</li>
+    <li>Open <a href="https://bastamp.com/account/api-keys" target="_blank" rel="noopener">bastamp.com/account/api-keys</a>.</li>
+    <li>Click "Create a new key", give it a name (e.g. "browser extension"), and copy the value shown — you only see it once.</li>
+    <li>Paste it here and click Save.</li>
+  </ol>
 
   <label for="apikey">API key</label>
   <input id="apikey" type="password" placeholder="ba_live_…" autocomplete="off">
-  <p class="help">
-    Create one at <a href="https://bastamp.com/account/api-keys" target="_blank" rel="noopener">bastamp.com/account/api-keys</a>.
-    Each stamp uses one credit from your account.
-  </p>
-
   <div>
     <button id="save">Save</button>
     <span id="saved">Saved</span>
   </div>
+
+  <h2>License &amp; source</h2>
+  <p>MIT-licensed. Source at <a href="https://github.com/stamp-verify/stamp-extension" target="_blank" rel="noopener">github.com/stamp-verify/stamp-extension</a> — every line you load is auditable.</p>
 
   <script src="options.js"></script>
 </body>

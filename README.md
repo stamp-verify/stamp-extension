@@ -1,92 +1,103 @@
 # BA | Stamp browser extension
 
-One-click web-page timestamping for [BA | Stamp](https://bastamp.com). Click the toolbar button, the extension captures the current page (URL + DOM + visible-viewport screenshot), hashes the capture, and anchors that hash on the Polygon blockchain via the public API.
+One-click web-page timestamping. Click the toolbar button — the extension captures the current page as a full-page PDF, anchors the PDF's SHA-256 on the Polygon blockchain via [bastamp.com](https://bastamp.com)'s public API, and saves the PDF to your Downloads folder.
 
-Useful for journalists, IP researchers, scam tracking, AI provenance — anywhere you need to prove "this URL looked like this at this exact time".
+The PDF is your evidence. Drop it on `bastamp.com/verify/<hash>` (or hash it yourself) to prove it hasn't been tampered with since the on-chain anchor.
 
-## What it captures
+## What it certifies
 
-- **URL** of the active tab
-- **DOM** snapshot (`document.documentElement.outerHTML`) at click time
-- **Visible viewport screenshot** (PNG)
-- **Capture metadata** (timestamp, viewport size, user agent, page title)
+That **this specific PDF** existed at the time it was anchored. The on-chain transaction commits to the PDF's SHA-256 forever; anyone can recompute the hash to confirm it matches.
 
-These are bundled into a single JSON file, the SHA-256 of which is anchored on Polygon. The bundle is downloaded to your Downloads folder — keep it; you need it to verify the stamp later.
+It does **not** certify that the page was authentic, that the server wasn't lying, or that no one tampered with the page before you captured it. It proves the page *as you saw it* existed at this time. That's the use case for journalism, IP filings, AI output provenance, scam evidence, and audit trails.
 
-**The page contents never leave your browser**, except as a hash sent to bastamp.com. The bundle stays with you.
+## How it works
 
-## Install (development, "load unpacked")
+1. You click the toolbar button on any page.
+2. Chrome's DevTools Protocol generates a full-page PDF (selectable text, every section, not just the visible viewport). Every page of the PDF carries a footer with the URL and capture timestamp.
+3. The extension SHA-256s the PDF bytes.
+4. It POSTs `{ contentHash, fileSize, fileName, mimeType }` to `https://bastamp.com/api/v1/stamps` with your API key. **The PDF itself never leaves your browser.**
+5. bastamp.com batches your hash into a Merkle tree and anchors the root on Polygon (~5 min). The anchor is forever.
+6. The PDF is saved to your Downloads folder.
+
+## How to verify
+
+### On bastamp.com (easiest)
+
+1. Visit `https://bastamp.com/verify/<hash>` (the popup shows the link after stamping).
+2. Drop the PDF on the file drop zone.
+3. The page recomputes the PDF's SHA-256 and compares it with the on-chain anchor. Match = the file is identical to the one stamped.
+
+### Offline (technical users — no trust in bastamp.com required)
+
+```bash
+# any platform
+sha256sum bastamp-<host>-<date>.pdf      # macOS/Linux
+certutil -hashfile bastamp-…pdf SHA256   # Windows
+```
+
+The output (prefix `0x` to match BA Stamp's format) is what was anchored on Polygon. Use the open-source [stamp-verify](https://github.com/stamp-verify/stamp-verify) CLI to query the on-chain anchor independently and confirm the match — no bastamp.com involvement at all.
+
+## Install (development — "load unpacked")
 
 1. Clone or download this repo.
-2. Open `chrome://extensions` (or `edge://extensions`, `about:debugging` on Firefox).
-3. Toggle **Developer mode**.
+2. Open `chrome://extensions` (or `edge://extensions`).
+3. Toggle **Developer mode** in the top right.
 4. Click **Load unpacked** and select the `stamp-extension` folder.
-5. Click the extension's icon → **Settings** → paste your bastamp.com API key (create one at [bastamp.com/account/api-keys](https://bastamp.com/account/api-keys)).
+5. Click the BA Stamp toolbar icon → **Settings** → paste your API key.
+   - Don't have one? Create one at [bastamp.com/account/api-keys](https://bastamp.com/account/api-keys). First stamp on a new account is free.
 
 Each stamp uses one credit from your bastamp.com account.
 
-## Verify a stamp
-
-Visit `https://bastamp.com/verify/<hash>` (the popup shows the link after stamping) and drop the bundle JSON on the file area at the bottom of the page. The page will:
-
-1. Recompute the canonical SHA-256 of the manifest and compare it to the on-chain anchor.
-2. Recompute the inner SHA-256s of the DOM and screenshot and compare them to what the manifest claims.
-3. Show "Bundle verified" with the captured URL, page title, capture timestamp, viewport, and the screenshot rendered inline.
-
-Both checks must pass for a green confirmation. If the manifest hash matches but the inner parts don't, the verify page tells you someone edited the bundle after the stamp.
-
-### Verify offline (technical users)
-
-If you want to confirm the hash entirely on your own machine, without trusting bastamp.com:
-
-```bash
-# canonicalize the manifest portion of the bundle and SHA-256 it
-jq -c -S '.manifest' bastamp-example.com-2026-05-11.json | sha256sum
-```
-
-The output (prefixed with `0x`) must match the hash on the verify page. The verifier CLI at [stamp-verify/stamp-verify](https://github.com/stamp-verify/stamp-verify) can also be used to confirm the on-chain anchor independently.
-
-## How the hashing works
-
-The bundle has two parts:
-
-1. **`manifest`** — a small JSON object with metadata + the SHA-256 of the DOM and the SHA-256 of the screenshot bytes.
-2. **`parts`** — the raw DOM string and base64-encoded screenshot.
-
-The **anchor hash** is computed only over the canonicalized `manifest`. Since `manifest` already commits to the DOM and screenshot via their SHA-256s, verifying the anchor proves both parts match the on-chain record.
-
-Canonicalization uses sorted-key JSON, no whitespace (RFC 8785–compatible for the shapes used here).
-
 ## Permissions explained
 
-- `activeTab` + `scripting` — read the DOM and capture the screenshot of the page you click the button on. Nothing else.
-- `downloads` — save the bundle to your Downloads folder.
-- `storage` — store your API key locally.
-- `notifications` — show a "page stamped" toast.
-- `host_permissions: https://bastamp.com/*` — call the public stamping API.
+| Permission | What it's for |
+|---|---|
+| `activeTab` + `scripting` | Read the current page when you click the toolbar button. |
+| `debugger` | Required by Chrome to use `Page.printToPDF` (the only way to capture a full-page PDF, not just the visible part). Chrome briefly shows a yellow "DevTools attached" bar; the extension detaches as soon as the PDF is generated (≤2 seconds for most pages). |
+| `downloads` | Save the PDF to your Downloads folder. |
+| `storage` | Store your API key locally (chrome.storage.local — never leaves the browser). |
+| `notifications` | Show a "page stamped" toast. |
+| `host_permissions: https://bastamp.com/*` | Call the stamping API. |
 
-The extension does **not** request access to all sites, the network, your history, or any other data.
+The extension does **not** request access to all sites, your network, your history, bookmarks, cookies, or any other data.
+
+## What gets sent to bastamp.com
+
+Only this, every time you click stamp:
+
+```json
+{
+  "contentHash": "0x<sha256 of the pdf>",
+  "fileName": "bastamp-<host>-<date>.pdf",
+  "fileSize": <int>,
+  "mimeType": "application/pdf"
+}
+```
+
+Plus your `Authorization: Bearer <api_key>` header. **The page contents and the PDF itself never leave your browser.**
 
 ## Architecture
 
 ```
-popup.html / popup.js     → UI: shows current URL, "Stamp this page" button
-background.js             → orchestrates: screenshot → DOM → manifest → hash → API → download
-options.html / options.js → save API key in chrome.storage.local
-manifest.json             → MV3 declaration (permissions, scripts, icons)
+manifest.json    MV3 declaration (permissions, scripts, icons)
+popup.html/.js   UI: current URL, "Stamp this page" button, result panel
+options.html/.js Settings (API key) + full explainer
+background.js   Orchestrator: chrome.debugger → Page.printToPDF → SHA-256 →
+                fetch POST /api/v1/stamps → cross-check server-echoed hash →
+                chrome.downloads.download
+icons/          16/48/128 PNG (scaled from the BA Stamp app icon)
 ```
 
-No build step. Pure DOM APIs + `chrome.*` extension APIs + `crypto.subtle` for hashing. Read every line before installing.
+No build step. Pure browser APIs. Anyone can read every line before installing — which is the point.
 
 ## License
 
 MIT — see [LICENSE](./LICENSE).
 
-## Roadmap (v0.2 and beyond)
+## Roadmap
 
-- Full-page screenshot (stitch across scroll, currently visible-viewport only)
-- Response HTTP headers (requires `webRequest` listener in background)
-- Firefox-specific build (manifest tweaks)
-- Real icons (current set is scaled from the BA Stamp app icon)
-- Chrome Web Store submission
-- Browser-action shortcut keybinding
+- Sign for Firefox Add-ons (currently Chrome / Edge / Brave only)
+- Optional inclusion of response HTTP headers in the PDF (forensic completeness)
+- Keyboard shortcut
+- Right-click context menu "Stamp this page"
+- Chrome Web Store + Firefox Add-ons submission (see [PUBLISHING.md](./PUBLISHING.md))
