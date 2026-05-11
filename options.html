@@ -14,12 +14,19 @@
       margin: 0 auto;
       line-height: 1.5;
     }
+    .heading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .heading img { height: 22px; width: auto; flex-shrink: 0; }
     h1 {
       font-size: 12px;
       font-weight: 700;
       letter-spacing: 0.22em;
       text-transform: uppercase;
-      margin-bottom: 6px;
+      margin: 0;
     }
     h1 .pipe { color: #5eead4; }
     .sub {
@@ -100,7 +107,10 @@
   </style>
 </head>
 <body>
-  <h1>BA <span class="pipe">|</span> Stamp — Settings</h1>
+  <div class="heading">
+    <img src="icons/ba-symbol-white.svg" alt="BA Stamp">
+    <h1>BA <span class="pipe">|</span> Stamp — Settings</h1>
+  </div>
   <p class="sub">Configure your API key and learn how the extension works.</p>
 
   <h2>What this extension does</h2>
