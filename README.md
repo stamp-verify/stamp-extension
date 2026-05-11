@@ -27,14 +27,24 @@ Each stamp uses one credit from your bastamp.com account.
 
 ## Verify a stamp
 
-Visit `https://bastamp.com/verify/<hash>` (the popup shows the link after stamping). To prove the bundle hasn't been tampered with, you can recompute its hash locally:
+Visit `https://bastamp.com/verify/<hash>` (the popup shows the link after stamping) and drop the bundle JSON on the file area at the bottom of the page. The page will:
+
+1. Recompute the canonical SHA-256 of the manifest and compare it to the on-chain anchor.
+2. Recompute the inner SHA-256s of the DOM and screenshot and compare them to what the manifest claims.
+3. Show "Bundle verified" with the captured URL, page title, capture timestamp, viewport, and the screenshot rendered inline.
+
+Both checks must pass for a green confirmation. If the manifest hash matches but the inner parts don't, the verify page tells you someone edited the bundle after the stamp.
+
+### Verify offline (technical users)
+
+If you want to confirm the hash entirely on your own machine, without trusting bastamp.com:
 
 ```bash
 # canonicalize the manifest portion of the bundle and SHA-256 it
 jq -c -S '.manifest' bastamp-example.com-2026-05-11.json | sha256sum
 ```
 
-The output must match the hash on the verify page.
+The output (prefixed with `0x`) must match the hash on the verify page. The verifier CLI at [stamp-verify/stamp-verify](https://github.com/stamp-verify/stamp-verify) can also be used to confirm the on-chain anchor independently.
 
 ## How the hashing works
 
