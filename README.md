@@ -36,16 +36,25 @@ certutil -hashfile bastamp-…pdf SHA256   # Windows
 
 The output (prefix `0x` to match BA Stamp's format) is what was anchored on Polygon. Use the open-source [stamp-verify](https://github.com/stamp-verify/stamp-verify) CLI to query the on-chain anchor independently and confirm the match — no bastamp.com involvement at all.
 
-## Install (development — "load unpacked")
+## Install
 
-1. Clone or download this repo.
-2. Open `chrome://extensions` (or `edge://extensions`).
-3. Toggle **Developer mode** in the top right.
-4. Click **Load unpacked** and select the `stamp-extension` folder.
-5. Click the BA Stamp toolbar icon → **Settings** → paste your API key.
-   - Don't have one? Create one at [bastamp.com/account/api-keys](https://bastamp.com/account/api-keys). First stamp on a new account is free.
+**[Install from the Chrome Web Store →](https://chromewebstore.google.com/detail/ba-stamp/hppgpoghncehmicbkdnaojlogokimamk)**
+
+Works on Chrome, Edge, Brave, Vivaldi, and any other Chromium-based browser. After install:
+
+1. Click the BA Stamp toolbar icon → **Settings** → paste your API key.
+2. Don't have a key? Create one at [bastamp.com/account/api-keys](https://bastamp.com/account/api-keys). First stamp on a new account is free.
 
 Each stamp uses one credit from your bastamp.com account.
+
+### Development — "load unpacked"
+
+If you're hacking on the source rather than using the published build:
+
+1. Clone the repo.
+2. Open `chrome://extensions` (or `edge://extensions`).
+3. Toggle **Developer mode** in the top right.
+4. Click **Load unpacked** and select the cloned folder.
 
 ## Permissions explained
 
