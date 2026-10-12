@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>BA | Stamp — Settings</title>
+  <link rel="icon" href="icons/128.png">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -21,6 +22,7 @@
       margin-bottom: 6px;
     }
     .heading img { height: 22px; width: auto; flex-shrink: 0; }
+    .heading .lead-pipe { color: #5eead4; font-size: 12px; font-weight: 700; }
     h1 {
       font-size: 12px;
       font-weight: 700;
@@ -108,13 +110,15 @@
 </head>
 <body>
   <div class="heading">
+    <img src="icons/seal.svg" alt="">
+    <span class="lead-pipe">|</span>
     <img src="icons/ba-symbol-white.svg" alt="BA">
     <h1><span class="pipe">|</span> Stamp — Settings</h1>
   </div>
   <p class="sub">Configure your API key and learn how the extension works.</p>
 
   <h2>What this extension does</h2>
-  <p>Capture the current web page as a full-page PDF (default) or as a viewport PNG screenshot — your choice in the popup. The file lands in your Downloads and opens for review. <strong>No credit is charged until you click Confirm.</strong> Once confirmed, the extension SHA-256s the file and anchors that hash on the Polygon blockchain via the public BA Stamp API.</p>
+  <p>Capture the current web page as a full-page PDF (default) or as a viewport PNG screenshot — your choice in the popup. The file lands in your Downloads and opens for review. <strong>No credit is charged until you click Confirm.</strong> Once confirmed, the extension SHA-256s the file and anchors that hash on Polygon + Bitcoin via the public BA Stamp API.</p>
   <p class="muted">The PDF carries the URL + capture timestamp in the footer of every page. The PNG has the same info in a banner above the screenshot. Both are designed so the resulting file alone tells you what was captured and when.</p>
 
   <h2>What the stamp certifies</h2>
