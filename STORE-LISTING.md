@@ -1,4 +1,4 @@
-# Chrome Web Store listing — copy-paste content for v0.3.2
+# Chrome Web Store listing — copy-paste content for v0.4.0
 
 All fields below map 1:1 to the dev-console listing form. Paste verbatim, adjust if Google flags something during review.
 
@@ -8,18 +8,18 @@ All fields below map 1:1 to the dev-console listing form. Paste verbatim, adjust
 
 ### Name (max 75 chars)
 ```
-BA | Stamp — Anchor web pages on Polygon
+BA | Stamp — Anchor web pages on Polygon + Bitcoin
 ```
 
 ### Summary (max 132 chars)
 ```
-Capture any web page as PDF or PNG and anchor its hash on Polygon — verifiable proof a URL existed at this time.
+Capture any web page as PDF or PNG and anchor its hash on Polygon + Bitcoin — verifiable proof a URL existed at this time.
 ```
 
 ### Description (paste in full)
 
 ```
-BA | Stamp is a one-click web-page timestamping tool. Click the toolbar icon on any page, pick PDF or PNG, review the captured file in your viewer, then anchor its SHA-256 hash on the Polygon blockchain. The hash is anchored forever; anyone can verify that the file you have today matches the one stamped at that moment.
+BA | Stamp is a one-click web-page timestamping tool. Click the toolbar icon on any page, pick PDF or PNG, review the captured file in your viewer, then anchor its SHA-256 hash on the Polygon blockchain, with a Bitcoin confirmation following via OpenTimestamps. The hash is anchored forever; anyone can verify that the file you have today matches the one stamped at that moment.
 
 WHAT IT'S FOR
 • Journalism — prove a public statement existed before it was edited or taken down.
@@ -31,8 +31,10 @@ HOW IT WORKS
 1. Open any web page and click the BA | Stamp toolbar icon.
 2. Choose Full-page PDF (selectable text, every section, URL + timestamp in every footer) or Screenshot PNG (visible viewport with a URL + timestamp banner above the screenshot).
 3. Click "Capture & preview". The file is generated locally, saved to your Downloads folder, and opens in your viewer. No credit charged yet.
-4. Inspect the file. If it looks right, click "Confirm & anchor (1 credit)". The extension SHA-256s the file and POSTs that hash to the public bastamp.com API. The hash gets anchored on Polygon in the next batch (~5 minutes).
+4. Inspect the file. If it looks right, click "Confirm & anchor (1 credit)". The extension SHA-256s the file and POSTs that hash to the public bastamp.com API. The hash gets anchored on Polygon in the next batch (~5 minutes); a Bitcoin confirmation follows within ~24h via OpenTimestamps. The popup then tracks the live anchor status and shows the verification link.
 5. If anything looks wrong, click "Cancel & delete file" — the file is removed from Downloads and no credit is charged.
+
+The popup also shows your remaining stamp credits.
 
 WHAT GETS SENT
 Only the SHA-256 hash of the captured file, the file size, the file name, and the MIME type. THE FILE ITSELF NEVER LEAVES YOUR BROWSER. The page contents are not transmitted, not stored, not analyzed.
@@ -63,7 +65,7 @@ English (United States)
 
 ### Single purpose (required, max ~1000 chars)
 ```
-Timestamp the current web page on the Polygon blockchain by capturing it as a PDF or PNG image, hashing the captured file locally with SHA-256, and anchoring that hash on chain through the public bastamp.com API. The captured file itself never leaves the user's browser — only its hash is transmitted.
+Timestamp the current web page on the Polygon + Bitcoin blockchains by capturing it as a PDF or PNG image, hashing the captured file locally with SHA-256, and anchoring that hash on chain through the public bastamp.com API. The captured file itself never leaves the user's browser — only its hash is transmitted.
 ```
 
 ### Justification — `activeTab` permission
@@ -88,12 +90,12 @@ Stores the user's bastamp.com API key and the in-progress preview state in chrom
 
 ### Justification — `notifications` permission
 ```
-Shows a single confirmation toast after the user successfully anchors a stamp on chain ("Page stamped on chain. 1 credit charged."). Used only as a UX confirmation, never for marketing or alerts.
+Shows a single confirmation toast after the user successfully submits a stamp ("Stamped on Polygon + Bitcoin. 1 credit charged.", with the verification link as a secondary line). Used only as a UX confirmation, never for marketing or alerts.
 ```
 
 ### Justification — `host_permissions: https://bastamp.com/*`
 ```
-Required to call the bastamp.com REST API endpoint POST /api/v1/stamps to anchor the SHA-256 hash on the Polygon blockchain. No requests are made to any other origin.
+Required to call the bastamp.com REST API: POST /api/v1/stamps to anchor the SHA-256 hash on Polygon + Bitcoin, GET /api/v1/stamps/<hash> to show the live anchor status, and GET /api/v1/account to show the remaining credit balance. No requests are made to any other origin.
 ```
 
 ### Privacy policy URL
@@ -149,7 +151,7 @@ Naming convention: `screenshot-1-popup-ready.png`, `screenshot-2-popup-confirm.p
 ## Submission checklist
 
 - [ ] Sign in at https://chrome.google.com/webstore/devconsole (pay the one-time $5 developer fee if first time).
-- [ ] New item → upload `stamp-extension-0.3.2.zip`.
+- [ ] New item → upload `stamp-extension-0.4.0.zip`.
 - [ ] Paste Name, Summary, Description from above.
 - [ ] Category: Productivity. Language: English (US).
 - [ ] Upload icon (already in zip), small promo tile, and screenshots.

@@ -11,12 +11,13 @@
       <img src="icons/ba-symbol-white.svg" alt="BA" class="brand-glyph">
       <span class="brand-text"><span class="brand-pipe">|</span> STAMP</span>
     </div>
-    <div class="tagline">Anchor any web page on Polygon</div>
+    <div class="tagline">Anchor any web page on Polygon + Bitcoin</div>
   </header>
 
   <main>
     <!-- READY: no pending preview, user can start a new capture -->
     <div id="state-ready">
+      <div class="hint" id="credits-line" hidden></div>
       <div id="target">
         <div class="target-label">Page to stamp</div>
         <div class="target-url" id="target-url">—</div>
@@ -61,12 +62,16 @@
       <button id="cancel-btn" class="secondary">Cancel &amp; delete file</button>
     </div>
 
-    <!-- DONE: confirmed, on chain -->
+    <!-- DONE: submitted; polls live until anchored -->
     <div id="state-done" class="hidden">
-      <div class="result-title done">Anchored ✓</div>
+      <div class="result-title done">Stamped ✓</div>
+      <div class="result-row"><span>Status</span><span id="done-status" class="value">checking…</span></div>
       <div class="result-row"><span>Hash</span><code id="done-hash"></code></div>
-      <div class="result-row"><a id="done-link" target="_blank" rel="noopener">View on bastamp.com →</a></div>
-      <div class="result-row muted">Anchoring on Polygon takes ~5 minutes. The verify page will show "pending" until the next batch settles, then "anchored". Your file stays in Downloads — drop it on the verify page anytime to re-confirm.</div>
+      <div class="result-row">
+        <a id="done-link" target="_blank" rel="noopener">View on bastamp.com →</a>
+        <button id="copy-link" type="button" class="footer-btn">Copy link</button>
+      </div>
+      <div class="result-row muted">Anchoring on Polygon takes ~5 minutes; the Bitcoin confirmation follows within ~24h via OpenTimestamps. This popup updates the status live. Your file stays in Downloads — drop it on the verify page anytime to re-confirm.</div>
       <button id="reset-btn" class="secondary">Stamp another page</button>
     </div>
 
