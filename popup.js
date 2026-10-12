@@ -25,8 +25,12 @@ const doneHash = document.getElementById("done-hash");
 const doneLink = document.getElementById("done-link");
 const errorBody = document.getElementById("error-body");
 const generatingHint = document.getElementById("generating-hint");
+const creditsLine = document.getElementById("credits-line");
+const doneStatus = document.getElementById("done-status");
+const copyLink = document.getElementById("copy-link");
 
 let activeTab = null;
+let statusTimer = null;
 
 (async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -44,6 +48,8 @@ let activeTab = null;
   const { pending } = await sendMsg({ type: "getPending" });
   if (pending) renderConfirm(pending);
   else show("ready");
+
+  loadCredits();
 })();
 
 captureBtn.addEventListener("click", async () => {
@@ -74,6 +80,7 @@ confirmBtn.addEventListener("click", async () => {
   doneHash.textContent = res.hash;
   doneLink.href = `https://bastamp.com/verify/${res.hash}`;
   show("done");
+  startStatusPolling(res.hash);
 });
 
 cancelBtn.addEventListener("click", async () => {
@@ -83,8 +90,16 @@ cancelBtn.addEventListener("click", async () => {
   show("ready");
 });
 
-resetBtn.addEventListener("click", () => show("ready"));
+resetBtn.addEventListener("click", () => { stopStatusPolling(); show("ready"); loadCredits(); });
 errorResetBtn.addEventListener("click", () => show("ready"));
+
+copyLink.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(doneLink.href);
+    copyLink.textContent = "Copied ✓";
+    setTimeout(() => { copyLink.textContent = "Copy link"; }, 1500);
+  } catch { /* clipboard blocked — the link stays visible to copy manually */ }
+});
 
 openOptions.addEventListener("click", (e) => {
   e.preventDefault();
@@ -109,6 +124,51 @@ function renderConfirm(p) {
 function renderError(msg) {
   errorBody.textContent = msg ?? "Unknown error";
   show("error");
+}
+
+async function loadCredits() {
+  const res = await sendMsg({ type: "getAccount" });
+  if (res.ok && res.configured) {
+    creditsLine.textContent = `${res.credits} credit${res.credits === 1 ? "" : "s"} left`;
+    creditsLine.hidden = false;
+  } else if (res.ok && res.configured === false) {
+    creditsLine.textContent = "No API key set — open Settings.";
+    creditsLine.hidden = false;
+  } else {
+    creditsLine.hidden = true; // network/API error: don't nag, the capture flow surfaces it
+  }
+}
+
+function stopStatusPolling() {
+  if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+}
+
+// Poll the anchor status until Polygon settles, then stop. Bitcoin follows
+// over ~24h via OpenTimestamps — too slow to poll in a popup, so we note it.
+function startStatusPolling(hash) {
+  stopStatusPolling();
+  const poll = async () => {
+    const res = await sendMsg({ type: "getStatus", hash });
+    if (!res.ok) { doneStatus.textContent = "status unavailable"; doneStatus.style.color = ""; return; }
+    const label = statusLabel(res);
+    doneStatus.textContent = label.text;
+    doneStatus.style.color = label.color;
+    if (label.stop) return;
+    statusTimer = setTimeout(poll, 8000);
+  };
+  poll();
+}
+
+function statusLabel(res) {
+  if (res.state === "anchored" && res.anchor) {
+    const btc = res.anchor.bitcoin;
+    if (btc && btc.status === "confirmed") {
+      return { text: "anchored on Polygon + Bitcoin ✓", color: "#16c172", stop: true };
+    }
+    return { text: "anchored on Polygon · Bitcoin to follow (~24h)", color: "#16c172", stop: true };
+  }
+  if (res.state === "none") return { text: "submitting…", color: "" };
+  return { text: "pending — anchoring on Polygon (~5 min)", color: "" };
 }
 
 function formatBytes(n) {

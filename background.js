@@ -23,6 +23,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     msg?.type === "confirmStamp" ? handleConfirm() :
     msg?.type === "cancelStamp" ? handleCancel() :
     msg?.type === "getPending" ? handleGetPending() :
+    msg?.type === "getStatus" ? handleStatus(msg) :
+    msg?.type === "getAccount" ? handleAccount() :
     null;
   if (!handler) return;
   handler
@@ -138,7 +140,8 @@ async function handleConfirm() {
       type: "basic",
       iconUrl: "icons/128.png",
       title: "BA | Stamp",
-      message: "Page stamped on chain. 1 credit charged.",
+      message: "Stamped on Polygon + Bitcoin. 1 credit charged.",
+      contextMessage: `Verify: bastamp.com/verify/${pending.contentHash}`,
     });
   } catch {}
 
@@ -189,6 +192,34 @@ async function handleGetPending() {
       capturedAt: pending.capturedAt,
     },
   };
+}
+
+// ── status / account (read-only, for the popup) ──
+
+// Poll a stamp's on-chain status. 404 means the hash isn't stamped (yet).
+async function handleStatus({ hash }) {
+  const apiKey = await getApiKey();
+  if (!apiKey) throw new Error("API key not set");
+  const res = await fetch(`${API_BASE}/api/v1/stamps/${hash}`, {
+    headers: { "Authorization": `Bearer ${apiKey}` },
+  });
+  if (res.status === 404) return { state: "none" };
+  if (!res.ok) throw new Error(`status HTTP ${res.status}`);
+  const j = await res.json();
+  // j.status: "pending" | "anchored"; j.anchor.bitcoin.status: "pending" | "confirmed"
+  return { state: j.status, anchor: j.anchor ?? null };
+}
+
+// Remaining stamp credits for the configured API key.
+async function handleAccount() {
+  const apiKey = await getApiKey();
+  if (!apiKey) return { configured: false };
+  const res = await fetch(`${API_BASE}/api/v1/account`, {
+    headers: { "Authorization": `Bearer ${apiKey}` },
+  });
+  if (!res.ok) throw new Error(`account HTTP ${res.status}`);
+  const j = await res.json();
+  return { configured: true, credits: j.credits, email: j.email };
 }
 
 // ── full-page PDF via CDP ──
