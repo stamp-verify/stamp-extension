@@ -18,6 +18,12 @@ header {
   gap: 8px;
 }
 
+.brand-seal {
+  height: 18px;
+  width: 18px;
+  flex-shrink: 0;
+}
+
 .brand-glyph {
   height: 16px;
   width: auto;
